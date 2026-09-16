@@ -1,0 +1,6 @@
+{
+  "name": "Radim Hnát: Kokpit Mecha",
+  "description": "Retro sci-fi deckbuilder hra v autentickém rezavém kokpitu bojového mecha s nýty, taktickou CRT obrazovkou nepřítele a samolepkou Krtečka.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
