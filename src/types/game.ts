@@ -197,6 +197,8 @@ export interface PatronDef {
   bonusCz: string;
   flavourCz: string;
   reliability: number;
+  portraitUrl?: string;
+  portraitFullUrl?: string;
 }
 
 export interface PartakDef {

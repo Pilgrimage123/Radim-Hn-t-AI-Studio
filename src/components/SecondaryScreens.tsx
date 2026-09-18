@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CardDef, HeroDef, PartakDef, PatronDef, ScreenId } from '../types/game';
 import { HERO_STATS, PARTACI, PATRONS } from '../data/heroesAndPatrons';
 import { classifyCardKind, CARD_KIND_META, starEmoji, starPriceMult } from '../data/cards';
+import { NavigatorPortraitModal } from './Modals';
 export * from './GameAuxScreens';
 
 export const FlavorScreen: React.FC<{ onContinue: () => void }> = ({ onContinue }) => {
@@ -232,6 +233,8 @@ export const PatronSelectScreen: React.FC<{
   onSelect: (id: string) => void;
   onBack: () => void;
 }> = ({ onSelect, onBack }) => {
+  const [viewingPatron, setViewingPatron] = useState<PatronDef | null>(null);
+
   return (
     <div className="min-h-screen p-4 sm:p-6 bg-[#0b0a08] text-[#eafcff] overflow-y-auto">
       <div className="max-w-4xl mx-auto">
@@ -246,13 +249,65 @@ export const PatronSelectScreen: React.FC<{
           {Object.entries(PATRONS).map(([id, p]) => (
             <div
               key={id}
-              className="p-3.5 rounded-xl bg-[#1a1410] border-2 border-[#8a6744] hover:border-[#d9a441] flex flex-col justify-between shadow-lg"
+              className="p-3.5 rounded-xl bg-[#1a1410] border-2 border-[#8a6744] hover:border-[#d9a441] flex flex-col justify-between shadow-lg transition-colors"
             >
               <div>
-                <div className="font-['Goldman'] font-bold text-base text-[#f3d48a] mb-1">{p.nameCz}</div>
-                <div className="text-xs font-semibold text-emerald-300 mb-2 font-mono">{p.bonusCz}</div>
-                <p className="text-xs text-slate-400 italic mb-2">{p.flavourCz}</p>
-                <div className="text-[10px] font-mono text-slate-400 mb-3">Spolehlivost spojení: {p.reliability}/30</div>
+                {p.portraitUrl ? (
+                  <div className="mb-2.5">
+                    <div className="flex gap-3 items-start">
+                      {/* Interactive portrait thumbnail with balanced sizing */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingPatron(p);
+                        }}
+                        className="group relative flex-shrink-0 w-20 h-24 sm:w-24 sm:h-28 rounded-xl overflow-hidden border-2 border-[#d9a441] shadow-[0_0_12px_rgba(217,164,65,0.3)] hover:shadow-[0_0_20px_rgba(217,164,65,0.6)] transition-all hover:scale-105 active:scale-95 text-left focus:outline-none focus:ring-2 focus:ring-[#f3d48a]"
+                        title="Klikni pro zvětšení portrétu"
+                      >
+                        <img
+                          src={p.portraitUrl}
+                          alt={p.nameCz}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-110 filter contrast-105"
+                        />
+                        {/* CRT scanline layer */}
+                        <div
+                          className="absolute inset-0 pointer-events-none opacity-20"
+                          style={{
+                            backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.6) 0px, rgba(0,0,0,0.6) 1px, transparent 1px, transparent 3px)'
+                          }}
+                        />
+                        {/* Zoom CTA banner */}
+                        <div className="absolute bottom-0 inset-x-0 bg-black/80 backdrop-blur-[2px] py-0.5 text-center text-[9px] font-mono text-[#f3d48a] font-bold border-t border-[#d9a441]/50 group-hover:bg-[#d9a441] group-hover:text-black transition-colors flex items-center justify-center gap-1">
+                          <span>🔍 Zvětšit</span>
+                        </div>
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="font-['Goldman'] font-bold text-base text-[#f3d48a] mb-0.5 leading-tight">
+                          {p.nameCz}
+                        </div>
+                        <div className="text-xs font-semibold text-emerald-300 mb-1 font-mono">
+                          {p.bonusCz}
+                        </div>
+                        <div className="text-[10px] font-mono text-amber-300/80 mb-1">
+                          ⚡ Spolehlivost: {p.reliability}/30
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-300 italic mt-1 line-clamp-3 leading-snug">
+                      {p.flavourCz}
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="font-['Goldman'] font-bold text-base text-[#f3d48a] mb-1">{p.nameCz}</div>
+                    <div className="text-xs font-semibold text-emerald-300 mb-2 font-mono">{p.bonusCz}</div>
+                    <p className="text-xs text-slate-400 italic mb-2">{p.flavourCz}</p>
+                    <div className="text-[10px] font-mono text-slate-400 mb-3">Spolehlivost spojení: {p.reliability}/30</div>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -275,6 +330,14 @@ export const PatronSelectScreen: React.FC<{
           </button>
         </div>
       </div>
+
+      {/* Lightbox / Zoom Modal for Navigator Portrait */}
+      {viewingPatron && (
+        <NavigatorPortraitModal
+          patron={viewingPatron}
+          onClose={() => setViewingPatron(null)}
+        />
+      )}
     </div>
   );
 };

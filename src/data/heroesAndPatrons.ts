@@ -138,10 +138,11 @@ export const HERO_STATS: Record<string, HeroDef> = {
 export const PATRONS: Record<string, PatronDef> = {
   carlo: {
     id: 'carlo',
-    nameCz: 'Harini "Chromo" Thapa',
+    nameCz: 'Hariri "Chromo" Thapa',
     bonusCz: '+5 Akcí každé kolo',
-    flavourCz: 'Harini sedí v hamaku hluboko ve venušanské džungli — od Neptunu to je skoro celá sluneční soustava. Rychlá, pohotová.',
-    reliability: 20
+    flavourCz: 'Hariri sedí v hamaku hluboko ve venušanské džungli — od Neptunu to je skoro celá sluneční soustava. Rychlá, pohotová.',
+    reliability: 20,
+    portraitUrl: '/src/assets/images/hariri_portrait_1789720952405.jpg'
   },
   aquinas: {
     id: 'aquinas',

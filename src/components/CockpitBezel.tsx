@@ -3,6 +3,9 @@ import { KrtekSticker } from './KrtekSticker';
 
 interface CockpitBezelProps {
   heroName: string;
+  patronName?: string;
+  patronPortraitUrl?: string;
+  onOpenPatronPortrait?: () => void;
   stageName: string;
   stageNum: number;
   stageTotal: number;
@@ -13,6 +16,9 @@ interface CockpitBezelProps {
 
 export const CockpitBezel: React.FC<CockpitBezelProps> = ({
   heroName,
+  patronName,
+  patronPortraitUrl,
+  onOpenPatronPortrait,
   stageName,
   stageNum,
   stageTotal,
@@ -58,12 +64,37 @@ export const CockpitBezel: React.FC<CockpitBezelProps> = ({
           }}
         />
 
-        {/* Pilot ID Stamped Plate */}
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-[0_0_6px_#f59e0b]" />
-          <span className="font-['Goldman'] text-[11px] sm:text-xs text-[#f3d48a] tracking-wider uppercase drop-shadow-[0_1px_1px_#000]">
-            KABINA RH-07 • {heroName || 'BOZHENA 2026'}
-          </span>
+        {/* Pilot ID Stamped Plate & Active Navigator Comms */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-[0_0_6px_#f59e0b]" />
+            <span className="font-['Goldman'] text-[11px] sm:text-xs text-[#f3d48a] tracking-wider uppercase drop-shadow-[0_1px_1px_#000] hidden xs:inline">
+              KABINA RH-07 • {heroName || 'BOZHENA 2026'}
+            </span>
+          </div>
+
+          {/* Active Navigator Live Comms Link */}
+          {patronPortraitUrl && onOpenPatronPortrait && (
+            <button
+              type="button"
+              onClick={onOpenPatronPortrait}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#2a1c12]/90 hover:bg-[#3a281a] border border-[#d9a441] text-[#f3d48a] shadow-[0_0_10px_rgba(217,164,65,0.3)] transition-all hover:scale-105 active:scale-95 group cursor-pointer"
+              title="Otevřít dálkový comms portrét navigátorky"
+            >
+              <div className="w-4 h-5 sm:w-5 sm:h-6 rounded overflow-hidden border border-[#d9a441] flex-shrink-0 bg-black relative">
+                <img
+                  src={patronPortraitUrl}
+                  alt={patronName || 'Navigátor'}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover object-top filter contrast-105"
+                />
+                <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              </div>
+              <span className="font-['Goldman'] text-[10px] sm:text-xs text-[#f3d48a] font-bold">
+                COMMS: {patronName?.split(' ')[0] || 'HARIRI'} <span className="text-[9px] opacity-75 group-hover:opacity-100">🔍</span>
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Stage & Controls */}

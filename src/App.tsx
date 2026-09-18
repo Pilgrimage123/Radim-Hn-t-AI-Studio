@@ -7,7 +7,7 @@ import { CockpitBezel } from './components/CockpitBezel';
 import { CrtMonitor } from './components/CrtMonitor';
 import { DefenseStrip } from './components/DefenseStrip';
 import { PilotConsole } from './components/PilotConsole';
-import { DiagnosticModal, PileInspectorModal } from './components/Modals';
+import { DiagnosticModal, NavigatorPortraitModal, PileInspectorModal } from './components/Modals';
 import {
   FlavorScreen,
   TitleScreen,
@@ -165,6 +165,7 @@ export default function App() {
   const [combatLogs, setCombatLogs] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showDiagnostic, setShowDiagnostic] = useState(false);
+  const [showPatronPortrait, setShowPatronPortrait] = useState(false);
   const [pileModal, setPileModal] = useState<{ title: string; cards: CardDef[] } | null>(null);
   const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
   const [crtGlitch, setCrtGlitch] = useState(false);
@@ -689,6 +690,9 @@ export default function App() {
           {/* Cockpit Shell Layer with Rust, Rivets & Krteček Sticker */}
           <CockpitBezel
             heroName={game.heroName}
+            patronName={game.patronName}
+            patronPortraitUrl={PATRONS[game.patron]?.portraitUrl}
+            onOpenPatronPortrait={() => setShowPatronPortrait(true)}
             stageName={STAGES[game.stage]?.name || 'Arx Prima'}
             stageNum={game.stage + 1}
             stageTotal={STAGES.length}
@@ -788,6 +792,14 @@ export default function App() {
               title={pileModal.title}
               cards={pileModal.cards}
               onClose={() => setPileModal(null)}
+            />
+          )}
+
+          {/* Navigator Comms Portrait Modal */}
+          {showPatronPortrait && (
+            <NavigatorPortraitModal
+              patron={PATRONS[game.patron] || PATRONS.carlo}
+              onClose={() => setShowPatronPortrait(false)}
             />
           )}
         </div>
