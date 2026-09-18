@@ -300,3 +300,72 @@ export const NavigatorPortraitModal: React.FC<NavigatorPortraitModalProps> = ({
     </div>
   );
 };
+
+export const CombatLogModal: React.FC<{
+  logs: string[];
+  onClose: () => void;
+}> = ({ logs, onClose }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col bg-[#141b2d] border-2 border-[#d9a441] rounded-2xl p-5 shadow-2xl text-[#eafcff]"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-3 right-4 text-2xl font-bold text-gray-400 hover:text-white"
+        >
+          &times;
+        </button>
+
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-700">
+          <span className="text-xl">📜</span>
+          <h3 className="font-['Goldman'] text-lg text-[#d9a441] font-bold">
+            Záznam palubního deníku a boje
+          </h3>
+        </div>
+
+        <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 font-mono text-xs">
+          {logs.length === 0 ? (
+            <p className="text-slate-400 italic text-center py-6">Záznam je zatím prázdný.</p>
+          ) : (
+            logs.map((log, idx) => (
+              <div
+                key={idx}
+                className="p-2 rounded bg-black/50 border border-slate-800 text-slate-200 leading-snug flex items-start gap-2"
+              >
+                <span className="text-[#d9a441] opacity-75 select-none text-[10px] pt-0.5">
+                  [{logs.length - idx}]
+                </span>
+                <span>{log}</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-4 pt-2 border-t border-slate-700 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 rounded-lg font-['Goldman'] text-xs font-bold uppercase bg-[#d9a441] hover:bg-amber-400 text-black shadow"
+          >
+            Zavřít
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+

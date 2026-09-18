@@ -389,3 +389,84 @@ export const PartakSelectScreen: React.FC<{
     </div>
   );
 };
+
+export const OptionsScreen: React.FC<{
+  soundEnabled: boolean;
+  onToggleSound: () => void;
+  onBack: () => void;
+}> = ({ soundEnabled, onToggleSound, onBack }) => {
+  return (
+    <div className="min-h-screen p-4 sm:p-6 bg-[#0b0a08] text-[#eafcff] overflow-y-auto flex flex-col justify-center items-center">
+      <div className="max-w-md w-full">
+        <div className="text-4xl text-center mb-2">⚙️</div>
+        <h2 className="font-['Goldman'] text-2xl sm:text-3xl text-[#d9a441] text-center mb-1">
+          Nastavení & Volby
+        </h2>
+        <p className="text-xs sm:text-sm text-center text-slate-400 mb-6 font-mono">
+          Konfigurace palubních systémů kabiny RH-07
+        </p>
+
+        <div className="space-y-4 mb-6">
+          {/* Sound card */}
+          <div className="p-4 rounded-xl bg-[#1a1410] border-2 border-[#8a6744] flex items-center justify-between shadow-lg">
+            <div>
+              <div className="font-['Goldman'] font-bold text-sm text-[#f3d48a] flex items-center gap-2">
+                <span>{soundEnabled ? '🔊' : '🔇'}</span>
+                <span>Zvukové efekty a audio</span>
+              </div>
+              <div className="text-xs text-slate-400 font-mono mt-0.5">
+                Zvuky laserů, štítů, karet a Krtečka
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onToggleSound}
+              className={`px-4 py-2 rounded-lg font-['Goldman'] text-xs font-bold uppercase transition-all shadow ${
+                soundEnabled
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-600'
+              }`}
+            >
+              {soundEnabled ? 'Zapnuto' : 'Vypnuto'}
+            </button>
+          </div>
+
+          {/* Kokpit info */}
+          <div className="p-4 rounded-xl bg-[#1a1410] border-2 border-[#8a6744] shadow-lg text-xs text-slate-300 space-y-2">
+            <div className="font-['Goldman'] font-bold text-sm text-[#f3d48a] flex items-center gap-2 mb-2">
+              <span>🤖</span>
+              <span>Specifikace mecha</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-800 pb-1">
+              <span className="text-slate-400">Procesor taktického CRT:</span>
+              <span className="font-mono text-emerald-300">TS-84 TACTICAL</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-800 pb-1">
+              <span className="text-slate-400">Satelitní podpora:</span>
+              <span className="font-mono text-amber-300">BabiCZka v3.2</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-800 pb-1">
+              <span className="text-slate-400">Ochranný talisman:</span>
+              <span className="font-mono text-red-300">Samolepka Krtečka 🖤</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Cílová stanice:</span>
+              <span className="font-mono text-[#f3d48a]">Arx Prima • Sídlo Y</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={onBack}
+            className="w-full py-2.5 rounded-xl font-['Goldman'] text-xs font-bold uppercase bg-gradient-to-r from-[#d9a441] to-[#b88628] text-black hover:brightness-110 shadow-lg"
+          >
+            ⬅️ Zpět do hlavního menu
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+

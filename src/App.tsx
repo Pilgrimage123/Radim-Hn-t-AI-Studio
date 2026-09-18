@@ -7,7 +7,7 @@ import { CockpitBezel } from './components/CockpitBezel';
 import { CrtMonitor } from './components/CrtMonitor';
 import { DefenseStrip } from './components/DefenseStrip';
 import { PilotConsole } from './components/PilotConsole';
-import { DiagnosticModal, NavigatorPortraitModal, PileInspectorModal } from './components/Modals';
+import { DiagnosticModal, NavigatorPortraitModal, PileInspectorModal, CombatLogModal } from './components/Modals';
 import {
   FlavorScreen,
   TitleScreen,
@@ -21,6 +21,7 @@ import {
   LoseScreen,
   StoryScreen,
   RoadmapScreen,
+  OptionsScreen,
 } from './components/SecondaryScreens';
 import {
   isSoundEnabled,
@@ -166,6 +167,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showDiagnostic, setShowDiagnostic] = useState(false);
   const [showPatronPortrait, setShowPatronPortrait] = useState(false);
+  const [showLogModal, setShowLogModal] = useState(false);
   const [pileModal, setPileModal] = useState<{ title: string; cards: CardDef[] } | null>(null);
   const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
   const [crtGlitch, setCrtGlitch] = useState(false);
@@ -192,10 +194,10 @@ export default function App() {
     setCurrentScreen('game-screen');
     addLog(`Expedice začíná! Pilotuje ${newG.heroName}.`);
     addLog(`Navigátor: ${newG.patronName} je na dálkovém spojení.`);
-    spawnStageDemons(newG, 0);
+    spawnStageDemons(0, newG);
   };
 
-  const spawnStageDemons = (gState: GameState, stageIndex: number) => {
+  const spawnStageDemons = (stageIndex: number, overrideState?: GameState) => {
     const stage = STAGES[stageIndex] || STAGES[0];
     const demons = stage.demons.map((proto, idx) => {
       const kw = proto.fixedKeyword || 'Striker';
@@ -261,65 +263,104 @@ export default function App() {
     });
 
     const activeDemon = demons[0];
-    const initialDeck = [...gState.deck].sort(() => 0.5 - Math.random());
-    const initialHand = initialDeck.slice(0, gState.handSize);
-    const remainingDeck = initialDeck.slice(gState.handSize);
 
-    setGame(prev => ({
-      ...prev,
-      stage: stageIndex,
-      demonIndex: 0,
-      currentDemon: activeDemon,
-      nextDemonAction: DEMON_ACTIONS[0],
-      deck: remainingDeck,
-      hand: initialHand,
-      discard: [],
-      actions: prev.maxActions,
-      encounter: {
-        ...prev.encounter,
-        slots: demons,
-        focusId: activeDemon.uid,
-      },
-    }));
+    setGame(prev => {
+      const baseState = overrideState || prev;
+      const allCards = [...baseState.deck, ...baseState.hand, ...baseState.discard];
+      const initialDeck = [...allCards].sort(() => 0.5 - Math.random());
+      const initialHand = initialDeck.slice(0, baseState.handSize);
+      const remainingDeck = initialDeck.slice(baseState.handSize);
+
+      return {
+        ...baseState,
+        stage: stageIndex,
+        demonIndex: 0,
+        currentDemon: activeDemon,
+        nextDemonAction: DEMON_ACTIONS[0],
+        deck: remainingDeck,
+        hand: initialHand,
+        discard: [],
+        actions: baseState.maxActions,
+        encounter: {
+          ...baseState.encounter,
+          slots: demons,
+          focusId: activeDemon.uid,
+          killsThisStage: 0,
+        },
+      };
+    });
 
     addLog(`Etapa ${stageIndex + 1}: ${stage.name}`);
     addLog(`Objevuje se ${activeDemon.name}!`);
   };
 
   // Play a card
-  const handlePlayCard = (cardIdx: number) => {
+  const handlePlayCard = (cardIdx: number, withBabiczka = false) => {
     const card = game.hand[cardIdx];
     if (!card || game.actions < card.cost) return;
 
     playCardPlaySound();
-    let dmgToDeal = 0;
-    let temptGain = 0;
-    let venialGain = 0;
-    let shieldGain = 0;
-    let drawCount = 0;
-    let stunGain = 0;
-    let reduceAngerAmt = 0;
+    const isBabiczkaAssist = withBabiczka || game.babiczkaTargeting;
 
     const txt = card.text;
-    const dmgMatch = txt.match(/Zraň za (\d+)/);
-    if (dmgMatch) dmgToDeal = parseInt(dmgMatch[1], 10);
+    let baseDmg = 0;
+    const dmgMatch = txt.match(/Zraň za (\d+)/i);
+    if (dmgMatch) baseDmg = parseInt(dmgMatch[1], 10);
 
-    const temptMatch = txt.match(/(?:Doplň|a) Protonovou bublináž o (\d+)/);
+    // Special card damage mechanics
+    if (card.id === 'improv_zbran') {
+      baseDmg = 7 + 2 * (game.powerOfGod || 0);
+    }
+    let consumeVyladeni = false;
+    if (card.id === 'odpaleni_reaktoru') {
+      consumeVyladeni = true;
+      baseDmg = Math.max(5, (game.powerOfGod || 0) * 3);
+    }
+    let consumeKoroze = false;
+    if (card.id === 'odloupnuty_nater') {
+      consumeKoroze = true;
+      baseDmg = (game.currentDemon?.corrosion || 0) * 2;
+    }
+
+    let temptGain = 0;
+    const temptMatch = txt.match(/(?:Doplň|a) Protonovou bublináž o (\d+)/i) || txt.match(/Protonová bublináž \+(\d+)/i);
     if (temptMatch) temptGain = parseInt(temptMatch[1], 10);
 
-    const venialMatch = txt.match(/(?:Doplň|a) Kapotu o (\d+)/);
+    let venialGain = 0;
+    const venialMatch = txt.match(/(?:Doplň|a) Kapotu o (\d+)/i) || txt.match(/\+(\d+) Kapota/i);
     if (venialMatch) venialGain = parseInt(venialMatch[1], 10);
 
-    const shieldMatch = txt.match(/Získej (\d+) bod(?:y|ů) Holoklam/);
+    if (card.id === 'zalohovane' && game.tempt > 10) {
+      venialGain += 4;
+    }
+
+    let venialLoss = 0;
+    if (card.id === 'rez_z_kapoty') {
+      venialLoss = 4;
+    }
+
+    let shieldGain = 0;
+    const shieldMatch = txt.match(/Získej (\d+) bod(?:y|ů) Holoklam/i);
     if (shieldMatch) shieldGain = parseInt(shieldMatch[1], 10);
 
-    const drawMatch = txt.match(/Lízni (\d+) kart/);
+    let vyladeniGain = 0;
+    const vyladeniMatch = txt.match(/Získej (\d+) Vyladění/i) || txt.match(/Získej (\d+) bod(?:ů|y)? Vyladění/i);
+    if (vyladeniMatch) vyladeniGain = parseInt(vyladeniMatch[1], 10);
+
+    let korozeGain = 0;
+    const korozeMatch = txt.match(/Aplikuj (\d+) Koroze/i);
+    if (korozeMatch) korozeGain = parseInt(korozeMatch[1], 10);
+
+    let drawCount = 0;
+    const drawMatch = txt.match(/Lízni (\d+) kart/i);
     if (drawMatch) drawCount = parseInt(drawMatch[1], 10);
 
-    const stunMatch = txt.match(/Zvyš Omráčení entity o (\d+)/);
+    let stunGain = 0;
+    const stunMatch = txt.match(/Zvyš Omráčení entity o (\d+)/i);
     if (stunMatch) stunGain = parseInt(stunMatch[1], 10);
 
-    const angerMatch = txt.match(/Sniž Agresi entity o (\d+)/);
+    let reduceAngerAmt = 0;
+    const angerMatch = txt.match(/Sniž Agresi entity o (\d+)/i);
     if (angerMatch) reduceAngerAmt = parseInt(angerMatch[1], 10);
 
     // Apply Ručičky multiplier
@@ -327,16 +368,21 @@ export default function App() {
       ? 1 + Math.min(0.5, (card.contemplationStacks || 1) * (game.contemplationPerTurn / 100))
       : 1;
 
-    let finalDmg = Math.round(dmgToDeal * enhance);
+    let finalDmg = Math.round(baseDmg * enhance);
     if (finalDmg > 0) {
       finalDmg += game.powerOfGod;
       finalDmg = Math.round(finalDmg * (game.banDamageMult || 1));
+      if (isBabiczkaAssist) {
+        finalDmg = Math.round(finalDmg * 2.5);
+      }
       playLaserSound();
       setCrtGlitch(true);
       setTimeout(() => setCrtGlitch(false), 250);
     }
 
     if (shieldGain > 0) playShieldSound();
+
+    const intent = resolveCardIntent(card);
 
     setGame(prev => {
       const newActions = prev.actions - card.cost;
@@ -346,61 +392,145 @@ export default function App() {
 
       let curDemon = prev.currentDemon ? { ...prev.currentDemon } : null;
       let newGrace = prev.gracePoints;
+      let newDemonIndex = prev.demonIndex;
 
-      if (curDemon && finalDmg > 0) {
-        curDemon.hp = Math.max(0, curDemon.hp - finalDmg);
-        curDemon.stunBar = (curDemon.stunBar || 0) + finalDmg + stunGain;
-        if (curDemon.stunBar >= curDemon.stunThreshold) {
-          curDemon.stunBar = 0;
-          curDemon.stunned = true;
-          curDemon.stunThreshold = curDemon.stunThreshold * 2;
-          addLog(`${curDemon.name} byla ochromena!`);
+      let newPowerOfGod = prev.powerOfGod || 0;
+      if (consumeVyladeni) {
+        newPowerOfGod = 0;
+      } else if (vyladeniGain > 0) {
+        newPowerOfGod = Math.min(10, newPowerOfGod + vyladeniGain);
+        addLog(`⚡ Vyladění zvýšeno na ${newPowerOfGod}!`);
+      }
+
+      if (curDemon) {
+        if (consumeKoroze) {
+          curDemon.corrosion = 0;
+        } else if (korozeGain > 0) {
+          curDemon.corrosion = (curDemon.corrosion || 0) + korozeGain;
+          addLog(`🧪 Aplikováno ${korozeGain} Koroze na ${curDemon.name}!`);
+        }
+
+        if (finalDmg > 0) {
+          curDemon.hp = Math.max(0, curDemon.hp - finalDmg);
+          curDemon.stunBar = (curDemon.stunBar || 0) + finalDmg + stunGain;
+          if (curDemon.stunBar >= curDemon.stunThreshold) {
+            curDemon.stunBar = 0;
+            curDemon.stunned = true;
+            curDemon.stunThreshold = curDemon.stunThreshold * 2;
+            addLog(`💫 ${curDemon.name} byla ochromena!`);
+          }
+        } else if (stunGain > 0) {
+          curDemon.stunBar = (curDemon.stunBar || 0) + stunGain;
+          if (curDemon.stunBar >= curDemon.stunThreshold) {
+            curDemon.stunBar = 0;
+            curDemon.stunned = true;
+            curDemon.stunThreshold = curDemon.stunThreshold * 2;
+            addLog(`💫 ${curDemon.name} byla ochromena!`);
+          }
+        }
+
+        if (reduceAngerAmt > 0) {
+          curDemon.anger = Math.max(0, curDemon.anger - reduceAngerAmt);
+          addLog(`🧊 Agrese snížena o ${reduceAngerAmt}.`);
+        }
+
+        // Check if enemy died
+        if (curDemon.hp <= 0) {
+          addLog(`💥 ${curDemon.name} byla zničena!`);
+          newGrace += 4;
+          const nextIdx = prev.demonIndex + 1;
+          newDemonIndex = nextIdx;
+          const stage = STAGES[prev.stage];
+          if (stage && nextIdx < stage.demons.length) {
+            const nextProto = stage.demons[nextIdx];
+            const kw = nextProto.fixedKeyword || 'Striker';
+            const stats = DEMON_STAT_SETS[kw] || DEMON_STAT_SETS.Striker;
+            curDemon = {
+              uid: `demon_${prev.stage}_${nextIdx}_${Date.now()}`,
+              name: nextProto.name,
+              desc: nextProto.desc,
+              keyword: kw,
+              maxHp: stats.hp,
+              hp: stats.hp,
+              anger: 0,
+              scale: 1,
+              level: nextProto.fixedLevel || prev.stage + 1,
+              levelMin: nextProto.fixedLevelMin || 1,
+              traits: nextProto.fixedTraits || ['scales'],
+              dmgTakenMult: 1,
+              angerGainMult: 1,
+              angerResistMult: 1,
+              lifestealPct: 0,
+              enrageCapBonus: 0,
+              shieldResistMult: 1,
+              hateHealMult: 1,
+              hateGrowMult: 1,
+              graceMult: 1,
+              actionDrain: 0,
+              scoutSuppressMult: 1,
+              viciousStrikeChance: 0.1,
+              skipActionChance: 0.05,
+              shieldPierceRemaining: 0,
+              actionDrainRamp: 0,
+              hateOneShotHealPct: 0,
+              hateOneShotHealUsed: false,
+              reviveAvailable: false,
+              revived: false,
+              corrosion: 0,
+              stunGainResistMult: 1,
+              calmResistMult: 1,
+              shieldCapDrain: 0,
+              mortalBias: 0,
+              deathEcho: 0,
+              stunProc: 0,
+              rageDelay: 0,
+              graceOnHit: 0,
+              handLock: false,
+              packHunterPct: 0,
+              coreTempt: stats.temptDmg,
+              coreVenial: stats.venialDmg,
+              coreMortal: stats.mortalDmg,
+              baseTempt: stats.temptDmg,
+              baseVenial: stats.venialDmg,
+              baseMortal: stats.mortalDmg,
+              combatRound: 0,
+              scoutRageBonus: 0,
+              rageMult: 1,
+              rageWarned: false,
+              stunBar: 0,
+              stunThreshold: stats.stun || 8,
+              stunned: false,
+              nextAction: DEMON_ACTIONS[0],
+            };
+            addLog(`Objevuje se nový nepřítel: ${curDemon.name}!`);
+          } else {
+            curDemon = null;
+            addLog(`Etapa ${prev.stage + 1} dokončena!`);
+            setTimeout(() => {
+              if (prev.stage >= STAGES.length - 1) {
+                setCurrentScreen('win-screen');
+              } else {
+                setCurrentScreen('choice-screen');
+              }
+            }, 600);
+          }
         }
       }
 
-      if (curDemon && reduceAngerAmt > 0) {
-        curDemon.anger = Math.max(0, curDemon.anger - reduceAngerAmt);
-      }
-
-      // Check if enemy died
-      if (curDemon && curDemon.hp <= 0) {
-        addLog(`💥 ${curDemon.name} byla zničena!`);
-        newGrace += 4;
-        const nextIdx = prev.demonIndex + 1;
-        const stage = STAGES[prev.stage];
-        if (stage && nextIdx < stage.demons.length) {
-          // Next demon
-          const nextProto = stage.demons[nextIdx];
-          const kw = nextProto.fixedKeyword || 'Devil';
-          const stats = DEMON_STAT_SETS[kw] || DEMON_STAT_SETS.Devil;
-          curDemon = {
-            ...curDemon,
-            uid: `demon_${prev.stage}_${nextIdx}_${Date.now()}`,
-            name: nextProto.name,
-            desc: nextProto.desc,
-            keyword: kw,
-            maxHp: stats.hp,
-            hp: stats.hp,
-            anger: 0,
-            level: nextProto.fixedLevel || prev.stage + 1,
-            stunBar: 0,
-            stunThreshold: stats.stun || 8,
-            stunned: false,
-          };
-          addLog(`Objevuje se nový nepřítel: ${curDemon.name}!`);
-        } else {
-          // Stage cleared!
-          curDemon = null;
-          addLog(`Etapa ${prev.stage + 1} dokončena!`);
-          setTimeout(() => {
-            if (prev.stage >= STAGES.length - 1) {
-              setCurrentScreen('win-screen');
-            } else {
-              setCurrentScreen('choice-screen');
-            }
-          }, 600);
+      // Handle multi-target splash / row to encounter slots
+      const updatedSlots = prev.encounter.slots.map(s => {
+        if (curDemon && s.uid === curDemon.uid) {
+          return curDemon;
         }
-      }
+        if (s.hp > 0 && finalDmg > 0) {
+          const secondaryDmg = intent === 'row' ? finalDmg : (intent === 'splash' ? Math.round(finalDmg * 0.4) : 0);
+          if (secondaryDmg > 0) {
+            const nextHp = Math.max(0, s.hp - secondaryDmg);
+            return { ...s, hp: nextHp };
+          }
+        }
+        return s;
+      });
 
       // Handle card draw
       let deckCopy = [...prev.deck];
@@ -415,11 +545,12 @@ export default function App() {
       }
 
       const newTempt = Math.min(prev.maxTempt, prev.tempt + Math.round(temptGain * enhance));
-      const newVenial = Math.min(prev.maxVenial, prev.venial + Math.round(venialGain * enhance));
+      const newVenial = Math.max(0, Math.min(prev.maxVenial, prev.venial + Math.round(venialGain * enhance) - venialLoss));
       const newShield = Math.min(prev.senzory, (prev.shield || 0) + Math.round(shieldGain * enhance));
 
       return {
         ...prev,
+        demonIndex: newDemonIndex,
         actions: newActions,
         hand: newHand,
         deck: deckCopy,
@@ -427,8 +558,18 @@ export default function App() {
         tempt: newTempt,
         venial: newVenial,
         shield: newShield,
+        powerOfGod: newPowerOfGod,
         currentDemon: curDemon,
+        encounter: {
+          ...prev.encounter,
+          slots: curDemon && !updatedSlots.some(s => s.uid === curDemon!.uid)
+            ? [...updatedSlots.filter(s => s.hp > 0), curDemon]
+            : updatedSlots,
+          focusId: curDemon ? curDemon.uid : prev.encounter.focusId,
+        },
         gracePoints: newGrace,
+        babiczkaTargeting: false,
+        babiczkaCooldown: isBabiczkaAssist ? 2 : prev.babiczkaCooldown,
       };
     });
 
@@ -437,17 +578,19 @@ export default function App() {
 
   // Play card with BabiCZka
   const handlePlayWithBabiczka = (cardIdx: number) => {
-    setGame(prev => ({ ...prev, babiczkaTargeting: false, babiczkaCooldown: 2 }));
     addLog('📡 BabiCZka asistuje — masivní posílení úderu!');
-    handlePlayCard(cardIdx);
+    handlePlayCard(cardIdx, true);
   };
 
   // End turn & enemy attacks
   const handleEndTurn = () => {
     playClickSound();
-    const curD = game.currentDemon;
 
     setGame(prev => {
+      let curD = prev.currentDemon ? { ...prev.currentDemon } : null;
+      let newDemonIndex = prev.demonIndex;
+      let newGrace = prev.gracePoints;
+
       let tDmg = 0;
       let vDmg = 0;
       let mDmg = 0;
@@ -473,13 +616,26 @@ export default function App() {
         addLog(`${curD.name} byla ochromena a vynechala tah!`);
       }
 
-      // Absorb damage with Holoklam first
+      // Absorb damage with Holoklam first (proper cascade through all damage types)
       let currentShield = prev.shield || 0;
       if (currentShield > 0) {
-        const bite = Math.min(currentShield, tDmg + vDmg + mDmg);
-        currentShield -= bite;
-        tDmg = Math.max(0, tDmg - bite);
-        addLog(`Holoklam pohltil ${bite} poškození.`);
+        let remainingBite = Math.min(currentShield, tDmg + vDmg + mDmg);
+        const totalAbsorbed = remainingBite;
+        currentShield -= remainingBite;
+
+        const tAbsorb = Math.min(tDmg, remainingBite);
+        tDmg -= tAbsorb;
+        remainingBite -= tAbsorb;
+
+        const vAbsorb = Math.min(vDmg, remainingBite);
+        vDmg -= vAbsorb;
+        remainingBite -= vAbsorb;
+
+        const mAbsorb = Math.min(mDmg, remainingBite);
+        mDmg -= mAbsorb;
+        remainingBite -= mAbsorb;
+
+        if (totalAbsorbed > 0) addLog(`Holoklam pohltil ${totalAbsorbed} poškození.`);
       }
 
       // Damage overflow pipeline: Bublináž -> Kapota -> Reaktor
@@ -505,6 +661,93 @@ export default function App() {
       // Check defeat
       if (currentMortal <= 0) {
         setTimeout(() => setCurrentScreen('lose-screen'), 600);
+      }
+
+      // Corrosion effect on demon at end of turn
+      if (curD && curD.hp > 0 && curD.corrosion && curD.corrosion > 0) {
+        const corrDmg = curD.corrosion;
+        curD.hp = Math.max(0, curD.hp - corrDmg);
+        addLog(`🧪 Koroze rozežírá ${curD.name} (-${corrDmg} zdraví)!`);
+        if (curD.hp <= 0) {
+          addLog(`💥 ${curD.name} podlehla korozi!`);
+          newGrace += 4;
+          const nextIdx = prev.demonIndex + 1;
+          newDemonIndex = nextIdx;
+          const stage = STAGES[prev.stage];
+          if (stage && nextIdx < stage.demons.length) {
+            const nextProto = stage.demons[nextIdx];
+            const kw = nextProto.fixedKeyword || 'Striker';
+            const stats = DEMON_STAT_SETS[kw] || DEMON_STAT_SETS.Striker;
+            curD = {
+              uid: `demon_${prev.stage}_${nextIdx}_${Date.now()}`,
+              name: nextProto.name,
+              desc: nextProto.desc,
+              keyword: kw,
+              maxHp: stats.hp,
+              hp: stats.hp,
+              anger: 0,
+              scale: 1,
+              level: nextProto.fixedLevel || prev.stage + 1,
+              levelMin: nextProto.fixedLevelMin || 1,
+              traits: nextProto.fixedTraits || ['scales'],
+              dmgTakenMult: 1,
+              angerGainMult: 1,
+              angerResistMult: 1,
+              lifestealPct: 0,
+              enrageCapBonus: 0,
+              shieldResistMult: 1,
+              hateHealMult: 1,
+              hateGrowMult: 1,
+              graceMult: 1,
+              actionDrain: 0,
+              scoutSuppressMult: 1,
+              viciousStrikeChance: 0.1,
+              skipActionChance: 0.05,
+              shieldPierceRemaining: 0,
+              actionDrainRamp: 0,
+              hateOneShotHealPct: 0,
+              hateOneShotHealUsed: false,
+              reviveAvailable: false,
+              revived: false,
+              corrosion: 0,
+              stunGainResistMult: 1,
+              calmResistMult: 1,
+              shieldCapDrain: 0,
+              mortalBias: 0,
+              deathEcho: 0,
+              stunProc: 0,
+              rageDelay: 0,
+              graceOnHit: 0,
+              handLock: false,
+              packHunterPct: 0,
+              coreTempt: stats.temptDmg,
+              coreVenial: stats.venialDmg,
+              coreMortal: stats.mortalDmg,
+              baseTempt: stats.temptDmg,
+              baseVenial: stats.venialDmg,
+              baseMortal: stats.mortalDmg,
+              combatRound: 0,
+              scoutRageBonus: 0,
+              rageMult: 1,
+              rageWarned: false,
+              stunBar: 0,
+              stunThreshold: stats.stun || 8,
+              stunned: false,
+              nextAction: DEMON_ACTIONS[0],
+            };
+            addLog(`Objevuje se nový nepřítel: ${curD.name}!`);
+          } else {
+            curD = null;
+            addLog(`Etapa ${prev.stage + 1} dokončena!`);
+            setTimeout(() => {
+              if (prev.stage >= STAGES.length - 1) {
+                setCurrentScreen('win-screen');
+              } else {
+                setCurrentScreen('choice-screen');
+              }
+            }, 600);
+          }
+        }
       }
 
       // Roll next demon action
@@ -535,8 +778,15 @@ export default function App() {
       // Cool down BabiCZka
       const cd = Math.max(0, prev.babiczkaCooldown - 1);
 
+      // Sync slots
+      const updatedSlots = prev.encounter.slots.map(s => {
+        if (curD && s.uid === curD.uid) return curD;
+        return s;
+      });
+
       return {
         ...prev,
+        demonIndex: newDemonIndex,
         actions: prev.maxActions,
         shield: currentShield,
         tempt: currentTempt,
@@ -548,6 +798,14 @@ export default function App() {
         babiczkaCooldown: cd,
         nextDemonAction: nextAct,
         currentDemon: curD,
+        encounter: {
+          ...prev.encounter,
+          slots: curD && !updatedSlots.some(s => s.uid === curD!.uid)
+            ? [...updatedSlots.filter(s => s.hp > 0), curD]
+            : updatedSlots,
+          focusId: curD ? curD.uid : prev.encounter.focusId,
+        },
+        gracePoints: newGrace,
         turnCount: prev.turnCount + 1,
       };
     });
@@ -629,8 +887,12 @@ export default function App() {
           }}
           onContinue={() => {
             const nextStage = game.stage + 1;
-            setCurrentScreen('game-screen');
-            spawnStageDemons(game, nextStage);
+            if (nextStage >= STAGES.length) {
+              setCurrentScreen('win-screen');
+            } else {
+              setCurrentScreen('game-screen');
+              spawnStageDemons(nextStage);
+            }
           }}
         />
       )}
@@ -643,8 +905,12 @@ export default function App() {
             else if (type === 'service') setCurrentScreen('confession-screen');
             else {
               const nextSt = game.stage + 1;
-              setCurrentScreen('game-screen');
-              spawnStageDemons(game, nextSt);
+              if (nextSt >= STAGES.length) {
+                setCurrentScreen('win-screen');
+              } else {
+                setCurrentScreen('game-screen');
+                spawnStageDemons(nextSt);
+              }
             }
           }}
         />
@@ -661,10 +927,22 @@ export default function App() {
             }));
             addLog('🛠️ Servis dokončen! Všechny vrstvy plně opraveny.');
             const nextSt = game.stage + 1;
-            setCurrentScreen('game-screen');
-            spawnStageDemons(game, nextSt);
+            if (nextSt >= STAGES.length) {
+              setCurrentScreen('win-screen');
+            } else {
+              setCurrentScreen('game-screen');
+              spawnStageDemons(nextSt);
+            }
           }}
           onBack={() => setCurrentScreen('choice-screen')}
+        />
+      )}
+
+      {currentScreen === 'options-screen' && (
+        <OptionsScreen
+          soundEnabled={soundOn}
+          onToggleSound={handleToggleSound}
+          onBack={() => setCurrentScreen('title-screen')}
         />
       )}
 
@@ -698,12 +976,7 @@ export default function App() {
             stageTotal={STAGES.length}
             soundEnabled={soundOn}
             onToggleSound={handleToggleSound}
-            onOpenLog={() => {
-              setPileModal({
-                title: 'Záznam boje',
-                cards: [],
-              });
-            }}
+            onOpenLog={() => setShowLogModal(true)}
           />
 
           {/* Main Cockpit Interior Area */}
@@ -800,6 +1073,14 @@ export default function App() {
             <NavigatorPortraitModal
               patron={PATRONS[game.patron] || PATRONS.carlo}
               onClose={() => setShowPatronPortrait(false)}
+            />
+          )}
+
+          {/* Combat Log Modal */}
+          {showLogModal && (
+            <CombatLogModal
+              logs={combatLogs}
+              onClose={() => setShowLogModal(false)}
             />
           )}
         </div>
